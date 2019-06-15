@@ -1,4 +1,5 @@
-﻿using OpenHardwareMonitor.Hardware;
+﻿using Newtonsoft.Json;
+using OpenHardwareMonitor.Hardware;
 using System;
 using System.Collections.Generic;
 using System.IO.Ports;
@@ -11,8 +12,10 @@ namespace UPCMonitor
 {
 	class Program
 	{
-		static string ARDPORT  = "COM3";
+		static string ARDPORT  = "COM4";
 		static SerialPort port = new SerialPort();
+
+		static int   BPPriceRequest = 0;
 
 		struct PCInfo
 		{
@@ -177,6 +180,22 @@ namespace UPCMonitor
 			}
 		}
 
+		static decimal GetBitcoinPrice()
+		{
+			string json;
+
+			using (var web = new System.Net.WebClient())
+			{
+				var url = @"https://api.coindesk.com/v1/bpi/currentprice.json";
+				json = web.DownloadString(url);
+			}
+
+			dynamic obj		 = JsonConvert.DeserializeObject(json);
+			var currentPrice = Convert.ToDecimal(obj.bpi.USD.rate.Value);
+
+			return currentPrice;
+		}
+
 		static void PrintPCInfo()
 		{
 			string txtInfo = String.Format
@@ -196,6 +215,8 @@ namespace UPCMonitor
 
 		public static void RealtimeDataSendProcess()
 		{
+			
+
 			Thread.Sleep(1000);
 
 			PrintPCInfo();
@@ -208,18 +229,33 @@ namespace UPCMonitor
 					 
 			while (true)
 			{
-				Thread.Sleep(2000);
+				Thread.Sleep(1000);
 
 				UpdateCPULoad();
 				UpdateRAMUsed();
 				UpdateGPUTempreture();
 
+				//Get Bitcoin price once in every 60 sec
+				if (BPPriceRequest == 0)
+				{
+					//Random rand = new Random();
+					//SendDATA(String.Format("<B,{0}>", 8600 + rand.Next(-100, 100)), ARDPORT);
+					SendDATA(String.Format("<B,{0}>", (int)GetBitcoinPrice()), ARDPORT);
+
+					BPPriceRequest = 60;
+
+					continue;
+				}
+
+				BPPriceRequest--;
+
 				SendDATA(String.Format("<U,{0},{1},{2},{3}>",
-							pcINFO.CPULoad,
-							pcINFO.CPUTemp,
-							pcINFO.GPUTemp,
-							pcINFO.UsedRAM),
-							ARDPORT);
+					pcINFO.CPULoad,
+					pcINFO.CPUTemp,
+					pcINFO.GPUTemp,
+					pcINFO.UsedRAM),
+					ARDPORT);
+
 			}
 		}
 

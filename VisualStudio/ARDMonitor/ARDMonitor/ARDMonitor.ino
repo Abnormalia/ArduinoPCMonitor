@@ -48,6 +48,9 @@ Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 #define M_INFO		0
 #define M_CPUGRAPH  1
+#define M_CRYPRO    2
+
+#define MAX_CRYPTO 62
 
 unsigned int displayMode = M_INFO;
 
@@ -105,8 +108,10 @@ void Init_TFT()
 
 	}
 	tft.begin(identifier);
-	tft.setRotation(1);
+	tft.setRotation(3);
 }
+
+int BTCPrices[MAX_CRYPTO];
 
 // the setup function runs once when you press reset or power the board
 void setup() 
@@ -118,10 +123,15 @@ void setup()
 
 	pinMode(13, OUTPUT);
 
-	DrawMainFrame();
+	DrawMainBG();
+
+	for (size_t i = 0; i < MAX_CRYPTO; i++)
+	{
+		BTCPrices[i] = 0;
+	}
 }
 
-void DrawMainFrame()
+void DrawMainBG()
 {
 	//Erase the screen
 	tft.fillScreen(BLACK);
@@ -133,7 +143,7 @@ void DrawMainFrame()
 	tft.print("ARDUINO MONITOR v0.1");
 }
 
-void DrawGraphFrame()
+void DrawGraphBG()
 {
 	tft.drawRect(5, 30, 290, 100, WHITE);
 	tft.drawRect(5, 135, 290, 100, WHITE);
@@ -147,8 +157,8 @@ void DrawGraphFrame()
 		{
 			for (size_t j = 0; j < 29; j++)
 			{
-				tft.drawFastHLine(6 + 10 * j, 10 + i, 5, CYAN);
-				tft.drawFastHLine(6 + 10 * j, 110 + i, 5, CYAN);
+				tft.drawFastHLine(6 + 10 * j, 8 + i, 5, CYAN);
+				tft.drawFastHLine(6 + 10 * j, 112 + i, 5, CYAN);
 			}
 		}
 
@@ -157,26 +167,6 @@ void DrawGraphFrame()
 
 		tft.setCursor(298, 225 - i * .9f);
 		tft.print(i);
-	}
-}
-
-void ColorByLoad(int value)
-{
-	tft.setTextColor(GREEN, BLACK);
-
-	if (value < 30)
-	{
-		tft.setTextColor(GREEN, BLACK);
-	}
-	else
-	if (value > 60 && value < 80)
-	{
-		tft.setTextColor(YELLOW, BLACK);
-	}
-	else
-	if (value > 80)
-	{
-		tft.setTextColor(RED, BLACK);
 	}
 }
 
@@ -269,6 +259,9 @@ String CPUMhz	= "";
 String GPUName	= "";
 String TotalRAM = "";
 
+int    PriceDelta = 0;
+String BTCPrice = "";
+
 unsigned int GraphIndex = 0;
 
 uint16_t ColorByValue(int value)
@@ -300,6 +293,99 @@ void PrintPCInfo()
 	tft.print("Memory : " + TotalRAM + " GB");
 }
 
+void OUT_PCInfo()
+{
+	tft.setCursor(30, 120);
+
+	tft.setTextColor(ColorByValue(CPULoad.toInt()), BLACK);
+	tft.print("CPU Load : " + CPULoad + TrimSufx("%", CPULoad));
+
+	tft.setCursor(30, 150);
+	tft.setTextColor(ColorByValue(CPUCoreTemps.toInt()), BLACK);
+	tft.print("CPU Temp : " + CPUCoreTemps + TrimSufx("C", CPUCoreTemps));
+
+	tft.setCursor(30, 180);
+	tft.setTextColor(ColorByValue(RAMUsed.toInt()), BLACK);
+	tft.print("RAM Used : " + RAMUsed + TrimSufx("%", RAMUsed));
+
+	tft.setCursor(30, 210);
+	tft.setTextColor(ColorByValue(GPUTemps.toInt()), BLACK);
+	tft.print("GPU Temp : " + GPUTemps + TrimSufx("C", GPUTemps));
+}
+
+int CryptoIndex = 0;
+
+void OUT_GraphInfo()
+{
+	tft.setTextSize(1);
+	tft.setTextColor(WHITE, BLACK);
+
+	int value = CPULoad.toInt();
+	tft.drawFastVLine(5 + GraphIndex, 130 - value, value, ColorByValue(value));
+	tft.fillCircle(5 + GraphIndex, 130 - value, 1, RED);
+
+	tft.setCursor(120, 28);
+	tft.print("  LOAD=" + CPULoad + TrimSufx("%", CPULoad));
+
+	value = CPUCoreTemps.toInt();
+	tft.drawFastVLine(5 + GraphIndex, 234 - value, value, ColorByValue(value));
+	tft.fillCircle(5 + GraphIndex, 234 - value, 1, RED);
+
+	tft.setCursor(120, 133);
+	tft.print("  TEMP=" + CPUCoreTemps + TrimSufx("C", CPUCoreTemps));
+
+	GraphIndex++;
+
+	if (GraphIndex > 290)
+	{
+		//Cleanup
+		tft.fillScreen(BLACK);
+		DrawMainBG();
+		DrawGraphBG();
+
+		GraphIndex = 0;
+	}
+}
+
+void DrawCryptoBG()
+{
+	tft.drawRect(5, 45, 310, 192, WHITE);
+
+	for (size_t i = 0; i < CryptoIndex; i++)
+	{
+		int value = (BTCPrices[i] % 1000) / 5;
+
+		PriceDelta = i == 0 ? 0 : BTCPrices[i] - BTCPrices[i - 1];
+
+		tft.drawRect(5 + i * 5, 235 - value, 5, value, PriceDelta >= 0 ? GREEN : RED);
+		tft.fillCircle(7 + i * 5, 235 - value, 3, RED);
+	}
+}
+
+void OUT_CryptoInfo()
+{
+	tft.setTextSize(3);
+	tft.setCursor(15, 35);	
+
+	int value = (BTCPrices[CryptoIndex] % 1000) / 5;
+
+	PriceDelta = CryptoIndex == 0 ? 0 : BTCPrices[CryptoIndex] - BTCPrices[CryptoIndex - 1];
+
+	if (PriceDelta >= 0)
+	{
+		tft.setTextColor(GREEN, BLACK);
+		tft.print("BTC : " + BTCPrice + "$(" + String(PriceDelta) + TrimSufx(")",String(PriceDelta)));
+	}
+	else
+	{
+		tft.setTextColor(RED, BLACK);
+		tft.print("BTC : " + BTCPrice + "$(" + String(PriceDelta) + TrimSufx(")", String(PriceDelta)));
+	}
+
+	tft.drawRect(5 + CryptoIndex * 5, 235 - value, 5, value, PriceDelta >= 0 ? GREEN : RED);
+	tft.fillCircle(7 + CryptoIndex * 5, 235 - value, 3, RED);
+}
+
 // the loop function runs over and over again until power down or reset
 void loop() 
 {
@@ -317,19 +403,28 @@ void loop()
 		//Serial.print("\tY = "); Serial.print(p.y);
 		//Serial.print("\tPressure = "); Serial.println(p.z);
 
-		if (displayMode == M_INFO)
+		displayMode++;
+
+		if (displayMode >= 3)
+			displayMode = 0;
+
+		switch (displayMode)
 		{
-			displayMode = M_CPUGRAPH;
-			DrawMainFrame();
-			DrawGraphFrame();
-		}
-		else
-		if (displayMode == M_CPUGRAPH)
-		{
-			displayMode = M_INFO;
-			DrawMainFrame();
-			PrintPCInfo();
-			GraphIndex = 0;
+			case M_INFO:
+				DrawMainBG();
+				PrintPCInfo();
+				GraphIndex = 0;
+			break;
+
+			case M_CPUGRAPH:
+				DrawMainBG();
+				DrawGraphBG();
+			break;
+
+			case M_CRYPRO:
+				DrawMainBG();
+				DrawCryptoBG();
+			break;
 		}
 	}
 
@@ -340,7 +435,7 @@ void loop()
 		String command = SubString(receivedChars, ',', 1);
 
 		//Static one time data
-		if (command == "I")
+		if (command == "I" )
 		{
 			CPUName	 = SubString(receivedChars, ',', 2);
 			CPUMhz	 = SubString(receivedChars, ',', 3);
@@ -360,56 +455,49 @@ void loop()
 			GPUTemps		= SubString(receivedChars, ',', 4);
 			RAMUsed			= SubString(receivedChars, ',', 5);
 
-			if (displayMode == M_INFO)
-			{
-				tft.setCursor(30, 120);
-				ColorByLoad(CPULoad.toInt());
-				tft.print("CPU Load : " + CPULoad + TrimSufx("%", CPULoad));
-
-				tft.setCursor(30, 150);
-				ColorByLoad(CPUCoreTemps.toInt());
-				tft.print("CPU Temp : " + CPUCoreTemps + TrimSufx("C", CPUCoreTemps));
-
-				tft.setCursor(30, 180);
-				ColorByLoad(RAMUsed.toInt());
-				tft.print("RAM Used : " + RAMUsed + TrimSufx("%", RAMUsed));
-
-				tft.setCursor(30, 210);
-				ColorByLoad(GPUTemps.toInt());
-				tft.print("GPU Temp : " + GPUTemps + TrimSufx("C", GPUTemps));
-			}
-
 			if (displayMode == M_CPUGRAPH)
 			{
-				tft.setTextSize(1);
-				tft.setTextColor(WHITE, BLACK);
+				OUT_GraphInfo();
+			}
 
-				int value = CPULoad.toInt();
-				tft.drawFastVLine(5+GraphIndex, 130 - value, value, ColorByValue(value));
-				tft.fillCircle(5+GraphIndex, 130 - value, 1, RED);
+			if (displayMode == M_INFO)
+			{
+				OUT_PCInfo();
+			}
+		}
 
-				tft.setCursor(120, 28);
-				tft.print("  LOAD=" + CPULoad + TrimSufx("%", CPULoad));
+		if (command == "B")
+		{
+			BTCPrice = SubString(receivedChars, ',', 2);
 
-				value = CPUCoreTemps.toInt();
-				tft.drawFastVLine(5 + GraphIndex, 234 - value, value, ColorByValue(value));
-				tft.fillCircle(5 + GraphIndex, 234 - value, 1, RED);
+			int curPrice = BTCPrice.toInt();
 
-				tft.setCursor(120, 133);
-				tft.print("  TEMP=" + CPUCoreTemps + TrimSufx("C", CPUCoreTemps));
+			BTCPrices[CryptoIndex] = curPrice;
+		
+			if (displayMode == M_CRYPRO)
+			{
+				OUT_CryptoInfo();
+			}
 
-				GraphIndex++;
+			CryptoIndex++;
 
-				if (GraphIndex > 290)
+			if (CryptoIndex >= MAX_CRYPTO)
+			{
+				CryptoIndex = 0;
+
+				for (size_t i = 0; i < MAX_CRYPTO; i++)
+				{
+					BTCPrices[i] = 0;
+				}
+
+				if (displayMode == M_CRYPRO)
 				{
 					//Cleanup
 					tft.fillScreen(BLACK);
-					DrawMainFrame();
-					DrawGraphFrame();
+					DrawMainBG();
 
-					GraphIndex = 0;
+					DrawCryptoBG();
 				}
-
 			}
 		}
 
